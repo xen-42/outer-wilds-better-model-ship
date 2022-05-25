@@ -198,6 +198,8 @@ namespace BetterModelShip
                 PlayerBody.SetVelocity(_dummyPlayer.GetAttachedOWRigidbody(false).GetPointVelocity(_dummyPlayer.transform.position));
                 playerController.UnlockMovement();
                 GlobalMessenger.FireEvent("DetachPlayerFromPoint");
+
+                _modelShip.GetComponent<PromptHandler>().ShowPrompts(false);
             }
 
             PlayerBody.WarpToPositionRotation(_dummyPlayer.transform.position, _dummyPlayer.transform.rotation);

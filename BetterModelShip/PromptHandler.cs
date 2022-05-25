@@ -54,7 +54,7 @@ namespace BetterModelShip
             GlobalMessenger.RemoveListener("WakeUp", OnWakeUp);
         }
 
-        private void ShowPrompts(bool visible)
+        public void ShowPrompts(bool visible)
         {
             _horizontalThrustPrompt.SetVisibility(visible);
             _rollPrompt.SetVisibility(visible);
