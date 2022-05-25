@@ -5,6 +5,8 @@ using UnityEngine;
 using UnityEngine.PostProcessing;
 using UnityEngine.SceneManagement;
 using System;
+using System.Reflection;
+using HarmonyLib;
 
 namespace BetterModelShip
 {
@@ -22,19 +24,21 @@ namespace BetterModelShip
         private OWCamera _previousCamera;
         private GameObject _modelShip;
 
-        private bool _UpdateCameraNextTick = false;
+        private bool _initialized;
+
+        public static ICommonCameraAPI CommonCameraAPI;
 
         private void Start()
         {
+            Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly());
+
             Instance = this;
 
-            Patches.Apply();
+            CommonCameraAPI = ModHelper.Interaction.GetModApi<ICommonCameraAPI>("xen.CommonCameraUtility");
 
-            ModHelper.Console.WriteLine($"My mod {nameof(BetterModelShip)} is loaded!", MessageType.Success);
-
-            GlobalMessenger<OWRigidbody>.AddListener("EnterRemoteFlightConsole", new Callback<OWRigidbody>(OnEnterRemoteFlightConsole));
-            GlobalMessenger.AddListener("ExitRemoteFlightConsole", new Callback(OnExitRemoteFlightConsole));
-            GlobalMessenger<OWCamera>.AddListener("SwitchActiveCamera", new Callback<OWCamera>(OnSwitchActiveCamera));
+            GlobalMessenger<OWRigidbody>.AddListener("EnterRemoteFlightConsole", OnEnterRemoteFlightConsole);
+            GlobalMessenger.AddListener("ExitRemoteFlightConsole", OnExitRemoteFlightConsole);
+            GlobalMessenger<OWCamera>.AddListener("SwitchActiveCamera", OnSwitchActiveCamera);
 
             SceneManager.sceneLoaded += OnSceneLoaded;
         }
@@ -43,43 +47,35 @@ namespace BetterModelShip
         {
             if (scene.name != "SolarSystem") return;
 
-            _modelShip = GameObject.Find("ModelRocket_Body");
+            (_OWCamera, _camera) = CommonCameraAPI.CreateCustomCamera("ModelShipCamera");
 
-            // Set up camera
-            ModelShipCamera = new GameObject();
-            ModelShipCamera.SetActive(false);
+            _modelShip = GameObject.FindObjectOfType<ModelShipController>().gameObject;
 
-            _camera = ModelShipCamera.AddComponent<Camera>();
-            _camera.enabled = false;
+            PreInit();
+        }
 
-            _OWCamera = ModelShipCamera.AddComponent<OWCamera>();
-            _OWCamera.renderSkybox = true;
+        private void PreInit()
+        {
+            var modelShipController = _modelShip.GetComponent<ModelShipController>();
+            modelShipController._thrusterModel._maxTranslationalThrust *= 2f;
 
-            FlashbackScreenGrabImageEffect temp = ModelShipCamera.AddComponent<FlashbackScreenGrabImageEffect>();
-            temp._downsampleShader = Locator.GetPlayerCamera().gameObject.GetComponent<FlashbackScreenGrabImageEffect>()._downsampleShader;
+            var detector = _modelShip.transform.Find("Detector").gameObject;
+            GameObject.Destroy(detector.GetComponent<ConstantForceDetector>());
+            detector.AddComponent<AlignmentForceDetector>();
 
-            PlanetaryFogImageEffect _image = ModelShipCamera.AddComponent<PlanetaryFogImageEffect>();
-            _image.fogShader = Locator.GetPlayerCamera().gameObject.GetComponent<PlanetaryFogImageEffect>().fogShader;
+            SectorManager.RegisterSectorDetector(detector.GetComponent<SectorDetector>());
+        }
 
-            PostProcessingBehaviour _postProcessiong = ModelShipCamera.AddComponent<PostProcessingBehaviour>();
-            _postProcessiong.profile = Locator.GetPlayerCamera().gameObject.GetAddComponent<PostProcessingBehaviour>().profile;
+        private void Init()
+        {
+            var probeCamera = Locator.GetProbe().transform.Find("CameraPivot/ForwardCamera");
+            
+            var noise = _OWCamera.gameObject.AddComponent<NoiseImageEffect>();
+            noise._noiseShader = probeCamera.GetComponent<NoiseImageEffect>()._noiseShader;
+            noise.strength = 0.005f;
 
-            ModelShipCamera.SetActive(true);
-            _camera.CopyFrom(Locator.GetPlayerCamera().mainCamera);
-            _camera.cullingMask &= ~(1 << 27) | (1 << 22) ;
-
-            ModelShipCamera.name = "ModelShipCamera";
-
-            ModelShipCamera.transform.parent = _modelShip.transform;
-            ModelShipCamera.transform.position = _modelShip.transform.position;
-            ModelShipCamera.transform.rotation = _modelShip.transform.rotation;
-            ModelShipCamera.transform.localPosition = 3 * Vector3.back + Vector3.up;
-
-            // By default the model ship only experiences gravity from Timber Hearth
-            Destroy(_modelShip.transform.Find("Detector").GetComponent<ConstantForceDetector>());
-            _modelShip.transform.Find("Detector").gameObject.AddComponent<DynamicForceDetector>();
-
-            IsPilotingModelShip = false;
+            var postProcessing = _OWCamera.gameObject.GetComponent<PostProcessingBehaviour>();
+            postProcessing.profile = probeCamera.GetComponent<PostProcessingBehaviour>().profile;
         }
 
         private void OnEnterRemoteFlightConsole(OWRigidbody _)
@@ -88,14 +84,19 @@ namespace BetterModelShip
 
             IsPilotingModelShip = true;
             _previousCamera = Locator.GetActiveCamera();
-            if (_OWCamera == null)
+            _camera.enabled = true;
+            GlobalMessenger<OWCamera>.FireEvent("SwitchActiveCamera", _OWCamera);
+
+            // For some stupid reason I can't set this where I wanted to idgi
+            _OWCamera.gameObject.transform.parent = _modelShip.transform;
+            _OWCamera.gameObject.transform.localPosition = new Vector3(0, 1, -1);
+            _OWCamera.gameObject.transform.localRotation = Quaternion.identity;
+
+            // Have to init here to be after Common Camera
+            if(!_initialized)
             {
-                ModHelper.Console.WriteLine("OWCamera is null", MessageType.Error);
-            }
-            else
-            {
-                _camera.enabled = true;
-                GlobalMessenger<OWCamera>.FireEvent("SwitchActiveCamera", _OWCamera);
+                _initialized = true;
+                ModHelper.Events.Unity.FireOnNextUpdate(Init);
             }
         }
 
@@ -104,35 +105,23 @@ namespace BetterModelShip
             ModHelper.Console.WriteLine($"OnExitRemoteFlightConsole", MessageType.Info);
 
             IsPilotingModelShip = false;
-            if (_OWCamera == null)
-            {
-                ModHelper.Console.WriteLine("Previous camera is null", MessageType.Error);
-            }
-            else
-            {
-                _camera.enabled = false;
-                GlobalMessenger<OWCamera>.FireEvent("SwitchActiveCamera", _previousCamera);
-            }
+            _camera.enabled = false;
+            _previousCamera.enabled = true;
+            GlobalMessenger<OWCamera>.FireEvent("SwitchActiveCamera", _previousCamera);
         }
 
         private void OnSwitchActiveCamera(OWCamera camera)
         {
-            if(camera != _OWCamera && IsPilotingModelShip)
+            if(camera.gameObject.name.Equals("PlayerCamera") && IsPilotingModelShip)
             {
-                _UpdateCameraNextTick = true;
+                // Send up back to the piloting camera
+                // Has to be next tick else the game gets mad about recursive FireEvent calls
+                ModHelper.Events.Unity.FireOnNextUpdate(() => OnEnterRemoteFlightConsole(null));
             }
         }
 
         private void Update()
         {
-            if(_UpdateCameraNextTick)
-            {
-                if(IsPilotingModelShip && Locator.GetActiveCamera() != _OWCamera)
-                {
-                    OnEnterRemoteFlightConsole(null);
-                }
-            }
-
             if (!IsPilotingModelShip) return;
 
             if (OWInput.IsNewlyPressed(InputLibrary.rollMode)) IsRollMode = true;

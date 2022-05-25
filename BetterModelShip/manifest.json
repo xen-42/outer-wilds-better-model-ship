@@ -4,5 +4,6 @@
   "name": "Better Model Ship",
   "uniqueName": "xen.BetterModelShip",
   "version": "0.1.0",
-  "owmlVersion": "2.0.0"
+  "owmlVersion": "2.3.2",
+  "dependencies": [ "xen.CommonCameraUtility" ]
 }
