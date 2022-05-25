@@ -16,7 +16,7 @@ namespace BetterModelShip
 
         public static bool IsPilotingModelShip { get; private set; }
         public static bool IsRollMode { get; private set; }
-        
+
         public static GameObject ModelShipCamera { get; private set; }
 
         private Camera _camera;
@@ -76,10 +76,11 @@ namespace BetterModelShip
             var attachGO = new GameObject("AttachPoint");
             attachGO.transform.parent = _modelShip.transform;
             attachGO.transform.localPosition = Vector3.zero;
-            attachGO.transform.rotation = Quaternion.Euler(270, 0, 0);
+            attachGO.transform.localRotation = Quaternion.Euler(270, 0, 0);
             _playerAttachPoint = attachGO.AddComponent<PlayerAttachPoint>();
 
             _modelShip.AddComponent<PromptHandler>();
+            _modelShip.AddComponent<ModelShipFlashlight>();
         }
 
         private void Init()
@@ -117,11 +118,11 @@ namespace BetterModelShip
 
             // For some stupid reason I can't set this where I wanted to idgi
             _OWCamera.gameObject.transform.parent = _modelShip.transform;
-            _OWCamera.gameObject.transform.localPosition = new Vector3(0, 1, -1);
+            _OWCamera.gameObject.transform.localPosition = new Vector3(0, 0, 0.5f);
             _OWCamera.gameObject.transform.localRotation = Quaternion.identity;
 
             // Have to init here to be after Common Camera
-            if(!_initialized)
+            if (!_initialized)
             {
                 _initialized = true;
                 ModHelper.Events.Unity.FireOnNextUpdate(InitCamera);
@@ -142,7 +143,7 @@ namespace BetterModelShip
 
             // The suit makes unwanted HUD stuff appear
             _isSuited = PlayerState.IsWearingSuit();
-            if(_isSuited)
+            if (_isSuited)
             {
                 Locator.GetPlayerSuit().RemoveSuit();
             }
@@ -181,14 +182,26 @@ namespace BetterModelShip
                 renderer.forceRenderingOff = false;
             }
 
-            _playerAttachPoint.DetachPlayer();
+            try
+            {
+                _playerAttachPoint.DetachPlayer();
+            }
+            // This happens if the ship was just destroyed
+            catch (Exception)
+            {
+                var playerController = Locator.GetPlayerController();
+                var playerTransform = Locator.GetPlayerTransform();
+                playerController.SetColliderActivation(true);
+                playerTransform.parent = null;
+                PlayerBody.MakeNonKinematic();
+                PlayerBody.SetVelocity(_dummyPlayer.GetAttachedOWRigidbody(false).GetPointVelocity(_dummyPlayer.transform.position));
+                playerController.UnlockMovement();
+                GlobalMessenger.FireEvent("DetachPlayerFromPoint");
+            }
 
-            player.transform.position = _dummyPlayer.transform.position;
-            player.transform.rotation = _dummyPlayer.transform.rotation;
+            PlayerBody.WarpToPositionRotation(_dummyPlayer.transform.position, _dummyPlayer.transform.rotation);
 
             GameObject.Destroy(_dummyPlayer);
-
-            _playerResources._invincible = false;
 
             GlobalMessenger.FireEvent("PlayerRepositioned");
 
@@ -201,15 +214,18 @@ namespace BetterModelShip
             GameObject.Find("TimberHearth_Body/Sector_TH/Sector_Streaming").GetComponent<SectorStreaming>()._softLoadRadius = 2500;
             GameObject.Find("TimberHearth_Body/Sector_TH").GetComponent<SphereShape>().radius = 1500;
 
-            if(_isSuited)
+            if (_isSuited)
             {
                 Locator.GetPlayerSuit().SuitUp();
             }
+
+            // Give us a tick to teleport back to the regular spot
+            ModHelper.Events.Unity.FireOnNextUpdate(() => _playerResources._invincible = false);
         }
 
         private void OnSwitchActiveCamera(OWCamera camera)
         {
-            if(camera.gameObject.name.Equals("PlayerCamera") && IsPilotingModelShip)
+            if (camera.gameObject.name.Equals("PlayerCamera") && IsPilotingModelShip)
             {
                 // Send us back to the piloting camera
                 // Has to be next tick else the game gets mad about recursive FireEvent calls
