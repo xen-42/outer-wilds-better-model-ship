@@ -78,8 +78,6 @@ namespace BetterModelShip
             attachGO.transform.localPosition = Vector3.zero;
             attachGO.transform.rotation = Quaternion.Euler(270, 0, 0);
             _playerAttachPoint = attachGO.AddComponent<PlayerAttachPoint>();
-
-            SectorManager.RegisterSectorDetector(detector.GetComponent<SectorDetector>());
         }
 
         private void Init()
