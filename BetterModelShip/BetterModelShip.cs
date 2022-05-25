@@ -224,9 +224,6 @@ namespace BetterModelShip
             {
                 Locator.GetPlayerSuit().SuitUp();
             }
-
-            // Give us a tick to teleport back to the regular spot
-            ModHelper.Events.Unity.FireOnNextUpdate(() => _playerResources._invincible = false);
         }
 
         private void OnSwitchActiveCamera(OWCamera camera)
