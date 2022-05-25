@@ -8,7 +8,7 @@ namespace BetterModelShip
     {
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ModelShipController), nameof(ModelShipController.ReadRotationalInput))]
-        private static bool ModelShipController_ReadRotationalInput(ModelShipController __instance, ref Vector3 __result)
+        public static bool ModelShipController_ReadRotationalInput(ModelShipController __instance, ref Vector3 __result)
         {
             if (BetterModelShip.IsRollMode)
             {

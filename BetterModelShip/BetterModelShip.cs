@@ -21,12 +21,19 @@ namespace BetterModelShip
 
         private Camera _camera;
         private OWCamera _OWCamera;
-        private OWCamera _previousCamera;
         private GameObject _modelShip;
+        private GameObject _dummyPlayer;
+        private PlayerResources _playerResources;
+        private PlayerAttachPoint _playerAttachPoint;
+
+        private bool _isSuited;
 
         private bool _initialized;
 
         public static ICommonCameraAPI CommonCameraAPI;
+
+        public static OWRigidbody PlayerBody { get; private set; }
+        public static OWRigidbody ModelShipBody { get; private set; }
 
         private void Start()
         {
@@ -51,7 +58,10 @@ namespace BetterModelShip
 
             _modelShip = GameObject.FindObjectOfType<ModelShipController>().gameObject;
 
+            _initialized = false;
+
             PreInit();
+            ModHelper.Events.Unity.FireOnNextUpdate(Init);
         }
 
         private void PreInit()
@@ -63,19 +73,39 @@ namespace BetterModelShip
             GameObject.Destroy(detector.GetComponent<ConstantForceDetector>());
             detector.AddComponent<AlignmentForceDetector>();
 
+            var attachGO = new GameObject("AttachPoint");
+            attachGO.transform.parent = _modelShip.transform;
+            attachGO.transform.localPosition = Vector3.zero;
+            attachGO.transform.rotation = Quaternion.Euler(270, 0, 0);
+            _playerAttachPoint = attachGO.AddComponent<PlayerAttachPoint>();
+
             SectorManager.RegisterSectorDetector(detector.GetComponent<SectorDetector>());
         }
 
         private void Init()
         {
+            PlayerBody = Locator.GetPlayerTransform().GetComponent<OWRigidbody>();
+            ModelShipBody = _modelShip.GetComponent<OWRigidbody>();
+            _playerResources = GameObject.FindObjectOfType<PlayerResources>();
+
+            var cullGroup = GameObject.Find("TimberHearth_Body/Sector_TH/Sector_Village/Interactables_Village").GetComponent<SectorCullGroup>();
+            cullGroup._sector = null;
+            cullGroup.SetVisible(true);
+        }
+
+        private void InitCamera()
+        {
             var probeCamera = Locator.GetProbe().transform.Find("CameraPivot/ForwardCamera");
-            
-            var noise = _OWCamera.gameObject.AddComponent<NoiseImageEffect>();
-            noise._noiseShader = probeCamera.GetComponent<NoiseImageEffect>()._noiseShader;
-            noise.strength = 0.005f;
 
             var postProcessing = _OWCamera.gameObject.GetComponent<PostProcessingBehaviour>();
             postProcessing.profile = probeCamera.GetComponent<PostProcessingBehaviour>().profile;
+        }
+
+        private void EnterCameraView()
+        {
+            Locator.GetActiveCamera().mainCamera.enabled = false;
+            _camera.enabled = true;
+            GlobalMessenger<OWCamera>.FireEvent("SwitchActiveCamera", _OWCamera);
         }
 
         private void OnEnterRemoteFlightConsole(OWRigidbody _)
@@ -83,9 +113,7 @@ namespace BetterModelShip
             ModHelper.Console.WriteLine($"OnEnterRemoteFlightConsole", MessageType.Info);
 
             IsPilotingModelShip = true;
-            _previousCamera = Locator.GetActiveCamera();
-            _camera.enabled = true;
-            GlobalMessenger<OWCamera>.FireEvent("SwitchActiveCamera", _OWCamera);
+            EnterCameraView();
 
             // For some stupid reason I can't set this where I wanted to idgi
             _OWCamera.gameObject.transform.parent = _modelShip.transform;
@@ -96,8 +124,45 @@ namespace BetterModelShip
             if(!_initialized)
             {
                 _initialized = true;
-                ModHelper.Events.Unity.FireOnNextUpdate(Init);
+                ModHelper.Events.Unity.FireOnNextUpdate(InitCamera);
             }
+
+            // We need to replace the player with a dummy
+            var player = Locator.GetPlayerBody();
+
+            _dummyPlayer = new GameObject("DummyPlayer");
+
+            var model = GameObject.Instantiate(player.transform.Find("Traveller_HEA_Player_v2")).gameObject;
+            model.transform.parent = _dummyPlayer.transform;
+            model.transform.localPosition = new Vector3(0, -1, 0); // To have the feet on the ground
+
+            _dummyPlayer.transform.parent = Locator.GetAstroObject(AstroObject.Name.TimberHearth).transform;
+            _dummyPlayer.transform.position = player.transform.position;
+            _dummyPlayer.transform.rotation = player.transform.rotation;
+
+            // The suit makes unwanted HUD stuff appear
+            _isSuited = PlayerState.IsWearingSuit();
+            if(_isSuited)
+            {
+                Locator.GetPlayerSuit().RemoveSuit();
+            }
+
+            // Keep TH loaded
+            GameObject.Find("TimberHearth_Body/Sector_TH/Sector_Streaming").GetComponent<SectorStreaming>()._softLoadRadius = 100000;
+            GameObject.Find("TimberHearth_Body/Sector_TH").GetComponent<SphereShape>().radius = 100000;
+
+            // Now disable player rendering and put it on the model ship
+            foreach (var renderer in player.GetComponentsInChildren<Renderer>())
+            {
+                renderer.forceRenderingOff = true;
+            }
+
+            _playerAttachPoint.AttachPlayer();
+
+            GlobalMessenger.FireEvent("PlayerRepositioned");
+
+            // Player has to be immortal
+            _playerResources._invincible = true;
         }
 
         private void OnExitRemoteFlightConsole()
@@ -106,17 +171,49 @@ namespace BetterModelShip
 
             IsPilotingModelShip = false;
             _camera.enabled = false;
-            _previousCamera.enabled = true;
-            GlobalMessenger<OWCamera>.FireEvent("SwitchActiveCamera", _previousCamera);
+            Locator.GetPlayerCamera().enabled = true;
+            GlobalMessenger<OWCamera>.FireEvent("SwitchActiveCamera", Locator.GetPlayerCamera());
+
+            // Put player back to normal
+            var player = Locator.GetPlayerBody();
+            foreach (var renderer in player.GetComponentsInChildren<Renderer>())
+            {
+                renderer.forceRenderingOff = false;
+            }
+
+            _playerAttachPoint.DetachPlayer();
+
+            player.transform.position = _dummyPlayer.transform.position;
+            player.transform.rotation = _dummyPlayer.transform.rotation;
+
+            GameObject.Destroy(_dummyPlayer);
+
+            _playerResources._invincible = false;
+
+            GlobalMessenger.FireEvent("PlayerRepositioned");
+
+            if (!Physics.autoSyncTransforms)
+            {
+                Physics.SyncTransforms();
+            }
+
+            // Put load radius back to normal
+            GameObject.Find("TimberHearth_Body/Sector_TH/Sector_Streaming").GetComponent<SectorStreaming>()._softLoadRadius = 2500;
+            GameObject.Find("TimberHearth_Body/Sector_TH").GetComponent<SphereShape>().radius = 1500;
+
+            if(_isSuited)
+            {
+                Locator.GetPlayerSuit().SuitUp();
+            }
         }
 
         private void OnSwitchActiveCamera(OWCamera camera)
         {
             if(camera.gameObject.name.Equals("PlayerCamera") && IsPilotingModelShip)
             {
-                // Send up back to the piloting camera
+                // Send us back to the piloting camera
                 // Has to be next tick else the game gets mad about recursive FireEvent calls
-                ModHelper.Events.Unity.FireOnNextUpdate(() => OnEnterRemoteFlightConsole(null));
+                ModHelper.Events.Unity.FireOnNextUpdate(EnterCameraView);
             }
         }
 
@@ -126,6 +223,9 @@ namespace BetterModelShip
 
             if (OWInput.IsNewlyPressed(InputLibrary.rollMode)) IsRollMode = true;
             if (OWInput.IsNewlyReleased(InputLibrary.rollMode)) IsRollMode = false;
+
+            // Make sure cheats and debug doesnt turn it off smh
+            _playerResources._invincible = true;
         }
     }
 }
