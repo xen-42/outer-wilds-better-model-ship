@@ -89,7 +89,7 @@ namespace BetterModelShip
             _playerResources = GameObject.FindObjectOfType<PlayerResources>();
 
             var cullGroup = GameObject.Find("TimberHearth_Body/Sector_TH/Sector_Village/Interactables_Village").GetComponent<SectorCullGroup>();
-            cullGroup._sector = null;
+            cullGroup.SetSector(null);
             cullGroup.SetVisible(true);
         }
 
