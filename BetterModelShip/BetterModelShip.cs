@@ -163,6 +163,7 @@ namespace BetterModelShip
 
             // Player has to be immortal
             _playerResources._invincible = true;
+            Locator.GetDeathManager()._invincible = true;
         }
 
         private void OnExitRemoteFlightConsole()
@@ -189,6 +190,7 @@ namespace BetterModelShip
             GameObject.Destroy(_dummyPlayer);
 
             _playerResources._invincible = false;
+            Locator.GetDeathManager()._invincible = false;
 
             GlobalMessenger.FireEvent("PlayerRepositioned");
 
@@ -226,6 +228,7 @@ namespace BetterModelShip
 
             // Make sure cheats and debug doesnt turn it off smh
             _playerResources._invincible = true;
+            Locator.GetDeathManager()._invincible = true;
         }
     }
 }
