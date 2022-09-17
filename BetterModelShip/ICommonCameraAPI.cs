@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using UnityEngine.Events;
 
 namespace BetterModelShip
@@ -7,7 +8,10 @@ namespace BetterModelShip
     {
         void RegisterCustomCamera(OWCamera OWCamera);
         (OWCamera, Camera) CreateCustomCamera(string name);
-        UnityEvent<PlayerTool> EquipTool();
+		(OWCamera, Camera) CreateCustomCamera(string name, Action<OWCamera> postInitMethod);
+		void ExitCamera(OWCamera OWCamera);
+		void EnterCamera(OWCamera OWCamera);
+		UnityEvent<PlayerTool> EquipTool();
         UnityEvent<PlayerTool> UnequipTool();
     }
 }

@@ -104,9 +104,7 @@ namespace BetterModelShip
 
         private void EnterCameraView()
         {
-            Locator.GetActiveCamera().mainCamera.enabled = false;
-            _camera.enabled = true;
-            GlobalMessenger<OWCamera>.FireEvent("SwitchActiveCamera", _OWCamera);
+            CommonCameraAPI.EnterCamera(_OWCamera);
         }
 
         private void OnEnterRemoteFlightConsole(OWRigidbody _)
@@ -172,12 +170,11 @@ namespace BetterModelShip
             ModHelper.Console.WriteLine($"OnExitRemoteFlightConsole", MessageType.Info);
 
             IsPilotingModelShip = false;
-            _camera.enabled = false;
-            Locator.GetPlayerCamera().enabled = true;
-            GlobalMessenger<OWCamera>.FireEvent("SwitchActiveCamera", Locator.GetPlayerCamera());
 
-            // Put player back to normal
-            var player = Locator.GetPlayerBody();
+			CommonCameraAPI.ExitCamera(_OWCamera);
+
+			// Put player back to normal
+			var player = Locator.GetPlayerBody();
             foreach (var renderer in player.GetComponentsInChildren<Renderer>())
             {
                 renderer.forceRenderingOff = false;
