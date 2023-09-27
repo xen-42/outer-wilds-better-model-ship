@@ -19,7 +19,6 @@ namespace BetterModelShip
 
         public static GameObject ModelShipCamera { get; private set; }
 
-        private Camera _camera;
         private OWCamera _OWCamera;
         private GameObject _modelShip;
         private GameObject _dummyPlayer;
@@ -27,8 +26,6 @@ namespace BetterModelShip
         private PlayerAttachPoint _playerAttachPoint;
 
         private bool _isSuited;
-
-        private bool _initialized;
 
         public static ICommonCameraAPI CommonCameraAPI;
 
@@ -41,7 +38,7 @@ namespace BetterModelShip
 
             Instance = this;
 
-            CommonCameraAPI = ModHelper.Interaction.GetModApi<ICommonCameraAPI>("xen.CommonCameraUtility");
+            CommonCameraAPI = ModHelper.Interaction.TryGetModApi<ICommonCameraAPI>("xen.CommonCameraUtility");
 
             GlobalMessenger<OWRigidbody>.AddListener("EnterRemoteFlightConsole", OnEnterRemoteFlightConsole);
             GlobalMessenger.AddListener("ExitRemoteFlightConsole", OnExitRemoteFlightConsole);
@@ -54,11 +51,17 @@ namespace BetterModelShip
         {
             if (scene.name != "SolarSystem") return;
 
-            (_OWCamera, _camera) = CommonCameraAPI.CreateCustomCamera("ModelShipCamera");
+            (_OWCamera, _) = CommonCameraAPI.CreateCustomCamera("ModelShipCamera", (OWCamera camera) =>
+			{
+				var probeCamera = Locator.GetProbe().transform.Find("CameraPivot/ForwardCamera");
+
+				var postProcessing = camera.gameObject.GetComponent<PostProcessingBehaviour>();
+				postProcessing.profile = probeCamera.GetComponent<PostProcessingBehaviour>().profile;
+
+				camera.cullingMask = probeCamera.GetComponent<OWCamera>().cullingMask;
+			});
 
             _modelShip = GameObject.FindObjectOfType<ModelShipController>().gameObject;
-
-            _initialized = false;
 
             PreInit();
             ModHelper.Events.Unity.FireOnNextUpdate(Init);
@@ -94,14 +97,6 @@ namespace BetterModelShip
             cullGroup.SetVisible(true);
         }
 
-        private void InitCamera()
-        {
-            var probeCamera = Locator.GetProbe().transform.Find("CameraPivot/ForwardCamera");
-
-            var postProcessing = _OWCamera.gameObject.GetComponent<PostProcessingBehaviour>();
-            postProcessing.profile = probeCamera.GetComponent<PostProcessingBehaviour>().profile;
-        }
-
         private void EnterCameraView()
         {
             CommonCameraAPI.EnterCamera(_OWCamera);
@@ -118,13 +113,6 @@ namespace BetterModelShip
             _OWCamera.gameObject.transform.parent = _modelShip.transform;
             _OWCamera.gameObject.transform.localPosition = new Vector3(0, 0, 0.5f);
             _OWCamera.gameObject.transform.localRotation = Quaternion.identity;
-
-            // Have to init here to be after Common Camera
-            if (!_initialized)
-            {
-                _initialized = true;
-                ModHelper.Events.Unity.FireOnNextUpdate(InitCamera);
-            }
 
             // We need to replace the player with a dummy
             var player = Locator.GetPlayerBody();
