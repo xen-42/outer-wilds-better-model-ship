@@ -23,7 +23,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Checkout
-              uses: "actions/checkout@v3"
+              uses: "actions/checkout@v4"
               
             - name: Fetch
               run: git fetch
@@ -52,9 +52,11 @@ jobs:
         if: ${{ (needs.pre_job.outputs.version != '0.0.0') && (needs.pre_job.outputs.exists == 'false') || (inputs.bypassCheck) }}
         name: Create Release
         runs-on: windows-latest
+        permissions:
+            contents: write
         steps:
             - name: Checkout
-              uses: "actions/checkout@v3"
+              uses: "actions/checkout@v4"
 
             - name: Setup .NET
               uses: "actions/setup-dotnet@v3"
@@ -66,7 +68,7 @@ jobs:
               run: dotnet build -c Release
 
             - name: Upload Artifact
-              uses: "actions/upload-artifact@v3"
+              uses: "actions/upload-artifact@v4"
               with:
                 name: "${{ env.PROJ_USERNAME }}.${{ env.PROJ_NAME }}"
                 path: "${{ env.PROJ_NAME }}/bin/Release"
