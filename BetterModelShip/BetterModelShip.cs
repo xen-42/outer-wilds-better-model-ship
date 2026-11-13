@@ -1,12 +1,14 @@
-﻿using OWML.ModHelper;
+﻿using HarmonyLib;
 using OWML.Common;
+using OWML.ModHelper;
 using OWML.Utils;
-using UnityEngine;
-using UnityEngine.PostProcessing;
-using UnityEngine.SceneManagement;
 using System;
 using System.Reflection;
-using HarmonyLib;
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.PostProcessing;
+using UnityEngine.SceneManagement;
+using OWML.Common.Enums;
 
 namespace BetterModelShip
 {
@@ -31,6 +33,12 @@ namespace BetterModelShip
 
         public static OWRigidbody PlayerBody { get; private set; }
         public static OWRigidbody ModelShipBody { get; private set; }
+        
+        public static InputConsts.InputCommandType ExitViewBinding
+        {
+            get;
+            private set;
+        }
 
         private void Start()
         {
@@ -43,6 +51,8 @@ namespace BetterModelShip
             GlobalMessenger<OWRigidbody>.AddListener("EnterRemoteFlightConsole", OnEnterRemoteFlightConsole);
             GlobalMessenger.AddListener("ExitRemoteFlightConsole", OnExitRemoteFlightConsole);
             GlobalMessenger<OWCamera>.AddListener("SwitchActiveCamera", OnSwitchActiveCamera);
+            
+            ExitViewBinding = ModHelper.RebindingHelper.RegisterRebindable("Exit View", "", Key.P, GamepadBinding.DPadDown, false);
 
             SceneManager.sceneLoaded += OnSceneLoaded;
         }
@@ -84,6 +94,7 @@ namespace BetterModelShip
 
             _modelShip.AddComponent<PromptHandler>();
             _modelShip.AddComponent<ModelShipFlashlight>();
+            _modelShip.AddComponent<ModelShipNoiseMaker>();
         }
 
         private void Init()
@@ -91,10 +102,8 @@ namespace BetterModelShip
             PlayerBody = Locator.GetPlayerTransform().GetComponent<OWRigidbody>();
             ModelShipBody = _modelShip.GetComponent<OWRigidbody>();
             _playerResources = GameObject.FindObjectOfType<PlayerResources>();
+            _modelShip.AddComponent<ModelShipStreamingSupport>().Initialize();
 
-            var cullGroup = GameObject.Find("TimberHearth_Body/Sector_TH/Sector_Village/Interactables_Village").GetComponent<SectorCullGroup>();
-            cullGroup.SetSector(null);
-            cullGroup.SetVisible(true);
         }
 
         private void EnterCameraView()
@@ -145,6 +154,9 @@ namespace BetterModelShip
             }
 
             _playerAttachPoint.AttachPlayer();
+            //Takes the player right to the Attach Point, helps to skip any volumes that mess with the players position (looking at Dark Bramble here).
+            PlayerBody.WarpToPositionRotation(_playerAttachPoint.transform.TransformPoint(_playerAttachPoint._attachOffset), _playerAttachPoint.transform.rotation);
+
 
             GlobalMessenger.FireEvent("PlayerRepositioned");
 
@@ -155,8 +167,9 @@ namespace BetterModelShip
 
         private void OnExitRemoteFlightConsole()
         {
-            ModHelper.Console.WriteLine($"OnExitRemoteFlightConsole", MessageType.Info);
+            if (!IsPilotingModelShip) return;
 
+            ModHelper.Console.WriteLine($"OnExitRemoteFlightConsole", MessageType.Info);
             IsPilotingModelShip = false;
 
 			CommonCameraAPI.ExitCamera(_OWCamera);
@@ -188,6 +201,16 @@ namespace BetterModelShip
             }
 
             PlayerBody.WarpToPositionRotation(_dummyPlayer.transform.position, _dummyPlayer.transform.rotation);
+
+            //Stops the forces from the ship attaching to the player.
+            PlayerBody.SetVelocity(_dummyPlayer.GetAttachedOWRigidbody(false).GetPointVelocity(_dummyPlayer.transform.position));
+
+            //Sets the player facing forward so we dont miss anything in the sky (flybys!)
+            var cameraController = Locator.GetPlayerTransform().GetComponentInChildren<PlayerCameraController>(true);
+
+            cameraController.StopSnapping();
+            cameraController.SnapToDegreesOverSeconds(0f, 0f, 0f, false);
+            cameraController.SetDegreesY(0f);
 
             GameObject.Destroy(_dummyPlayer);
 

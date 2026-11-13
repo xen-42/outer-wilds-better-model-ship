@@ -8,6 +8,7 @@ namespace BetterModelShip
         private ScreenPrompt _flashLightPrompt;
         private ScreenPrompt _horizontalThrustPrompt;
         private ScreenPrompt _verticalThrustPrompt;
+        private ScreenPrompt _exitViewPrompt;
 
         private bool _screenPromptsInitialized;
 
@@ -17,6 +18,9 @@ namespace BetterModelShip
         {
             _screenPromptsInitialized = false;
             LateInitializerManager.RegisterLateInitializer(this);
+
+            //New prompt- YAY!
+            _exitViewPrompt = new ScreenPrompt(InputLibrary.GetInputCommand(BetterModelShip.ExitViewBinding), "Exit View <CMD>");
 
             _horizontalThrustPrompt = new ScreenPrompt(InputLibrary.moveXZ, UITextLibrary.GetString(UITextType.HorizontalPrompt), 0, ScreenPrompt.DisplayState.Normal, false);
             _rollPrompt = new ScreenPrompt(InputLibrary.rollMode, InputLibrary.look, $"<CMD1> {UITextLibrary.GetString(UITextType.HoldPrompt)}  +<CMD2>   {UITextLibrary.GetString(UITextType.RollPrompt)}",
@@ -36,6 +40,7 @@ namespace BetterModelShip
             Locator.GetPromptManager().AddScreenPrompt(_flashLightPrompt, PromptPosition.UpperLeft, false);
             Locator.GetPromptManager().AddScreenPrompt(_horizontalThrustPrompt, PromptPosition.UpperLeft, false);
             Locator.GetPromptManager().AddScreenPrompt(_verticalThrustPrompt, PromptPosition.UpperLeft, false);
+            Locator.GetPromptManager().AddScreenPrompt(_exitViewPrompt, PromptPosition.UpperRight, false);
         }
 
         private void OnDestroy()
@@ -47,6 +52,7 @@ namespace BetterModelShip
                 Locator.GetPromptManager().RemoveScreenPrompt(_rollPrompt, PromptPosition.UpperLeft);
                 Locator.GetPromptManager().RemoveScreenPrompt(_flashLightPrompt, PromptPosition.UpperLeft);
                 Locator.GetPromptManager().RemoveScreenPrompt(_verticalThrustPrompt, PromptPosition.UpperLeft);
+                Locator.GetPromptManager().RemoveScreenPrompt(_exitViewPrompt, PromptPosition.UpperRight);
             }
 
             GlobalMessenger.RemoveListener("GamePaused", OnGamePaused);
@@ -60,6 +66,8 @@ namespace BetterModelShip
             _rollPrompt.SetVisibility(visible);
             _flashLightPrompt.SetVisibility(visible);
             _verticalThrustPrompt.SetVisibility(visible);
+
+            _exitViewPrompt.SetVisibility(visible && OWInput.GetInputMode() == InputMode.ModelShip);
         }
 
         private void Update()

@@ -4,8 +4,8 @@
   "author": "xen",
   "name": "Better Model Ship",
   "uniqueName": "xen.BetterModelShip",
-  "version": "0.2.1",
-  "owmlVersion": "2.9.8",
+  "version": "0.2.2",
+  "owmlVersion": "2.16.3",
   "dependencies": [ "xen.CommonCameraUtility" ],
   "donateLink": "https://www.patreon.com/xen42"
 }
